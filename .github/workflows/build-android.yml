@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: returscan-deploy
+  group: returscan-android-build
   cancel-in-progress: true
 jobs:
   build:
@@ -35,12 +35,3 @@ jobs:
           name: ReturScan-Pro-Android-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-  deploy-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - uses: actions/deploy-pages@v4
