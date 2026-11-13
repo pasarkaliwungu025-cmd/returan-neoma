@@ -386,6 +386,7 @@
     .b-pending { background: var(--warning-bg); color: var(--warning); }
     .b-extra   { background: var(--danger-bg); color: var(--danger); }
     .b-dup     { background: var(--purple-bg); color: var(--purple); }
+    .b-scanned { background: var(--success-bg); color: #166534; }
 
     .btn-del-item {
       background: #fee2e2;
@@ -1318,6 +1319,7 @@
       else badge = `<span class="badge b-extra">TIDAK TERDAFTAR</span>`;
 
       const dupBadge = r.isDuplicate ? `<span class="badge b-dup">DUPLIKAT ${r.scanCount}x</span>` : "";
+      const scannedBadge = r.scanCount > 0 ? `<span class="badge b-scanned">✓ SUDAH SCAN</span>` : "";
 
       const metaLines = [];
       if (r.orderId) metaLines.push(`Order: ${escapeHtml(r.orderId)}`);
@@ -1328,7 +1330,7 @@
         <div class="resi-item">
           <div style="min-width:0; flex:1;">
             <div class="resi-code">${escapeHtml(r.resi)}</div>
-            <div style="margin-top:4px;">${badge}${dupBadge}</div>
+            <div style="margin-top:4px;">${badge}${scannedBadge}${dupBadge}</div>
             ${metaLines.length ? `<div class="resi-meta">${metaLines.join("<br>")}</div>` : ""}
           </div>
           <button class="btn-del-item" type="button" data-delete-resi="${escapeHtml(r.resi)}">Hapus</button>
