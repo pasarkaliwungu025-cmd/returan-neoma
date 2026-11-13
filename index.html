@@ -866,12 +866,13 @@
 
     let statusType = ""; // matched | dup | extra
 
+    let attemptCount = 1;
+
     if (existingScan) {
-      existingScan.count += 1;
-      existingScan.lastScanAt = timestamp;
-      existingScan.lastScanMs = Date.now();
-      existingScan.method = method;
+      // Resi yang sudah pernah diterima ditolak: jangan tambah jumlah scan,
+      // jangan ubah waktu scan sah, dan jangan ubah status data.
       statusType = "dup";
+      attemptCount = existingScan.count + 1;
     } else {
       state.scanMap[resi] = {
         resi,
@@ -884,12 +885,12 @@
       statusType = inInitial ? "matched" : "extra";
     }
 
-    // Simpan ke log terbaru (maks 15 item)
+    // Catat percobaan terbaru; duplikat ditandai DITOLAK, bukan scan sah.
     state.recentLogs.unshift({
       resi,
       statusType,
       inInitial,
-      count: state.scanMap[resi].count,
+      count: statusType === "dup" ? attemptCount : 1,
       time: timestamp,
       method
     });
@@ -915,7 +916,7 @@
     if (statusType === "matched") {
       title = "✅ COCOK DENGAN DATA AWAL";
     } else if (statusType === "dup") {
-      title = `🔁 DUPLIKAT! Sudah discan ${scanData.count}x` + (inInitial ? " (Ada di Data Awal)" : " (Tidak Terdaftar)");
+      title = `⛔ DITOLAK! RESI SUDAH PERNAH DISCANN (${scanData.count}x)` + (inInitial ? " • Ada di Data Awal" : " • Tidak Terdaftar");
     } else {
       title = "⚠️ TIDAK ADA DI DATA AWAL";
     }
@@ -956,10 +957,10 @@
       html5QrCode = new Html5Qrcode("reader");
 
       const config = {
-        fps: 12,
+        fps: 20,
         qrbox: (vw, vh) => {
-          const w = Math.max(200, Math.floor(vw * 0.86));
-          const h = Math.max(110, Math.min(180, Math.floor(vh * 0.42)));
+          const w = Math.max(220, Math.floor(vw * 0.82));
+          const h = Math.max(120, Math.min(200, Math.floor(vh * 0.46)));
           return { width: w, height: h };
         },
         aspectRatio: 1.333,
@@ -1006,8 +1007,8 @@
     if (!code) return;
 
     const now = Date.now();
-    // Jeda 2 detik hanya untuk resi YANG SAMA agar kamera tidak menembak berulang dalam 1 detik
-    if (code === lastCamCode && (now - lastCamTime) < 2000) {
+    // Filter frame berulang sangat singkat; setelah 1,2 detik duplikat akan diberi tanda DITOLAK.
+    if (code === lastCamCode && (now - lastCamTime) < 1200) {
       return;
     }
 
@@ -1275,7 +1276,7 @@
     container.innerHTML = state.recentLogs.slice(0, 5).map(log => {
       let badge = "";
       if (log.statusType === "matched") badge = `<span class="badge b-matched">COCOK</span>`;
-      else if (log.statusType === "dup") badge = `<span class="badge b-dup">DUPLIKAT (${log.count}x)</span>`;
+      else if (log.statusType === "dup") badge = `<span class="badge b-dup">⛔ DUPLIKAT • DITOLAK</span>`;
       else badge = `<span class="badge b-extra">TIDAK TERDAFTAR</span>`;
 
       return `
