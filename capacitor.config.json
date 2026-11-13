@@ -1,0 +1,8 @@
+{
+  "appId": "id.neoma.returscan",
+  "appName": "ReturScan Pro",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
