@@ -301,7 +301,7 @@
     .scan-banner.show { display: block; }
     .scan-banner.matched { background: var(--success-bg); border-left-color: var(--success); color: #14532d; }
     .scan-banner.extra   { background: var(--danger-bg); border-left-color: var(--danger); color: #7f1d1d; }
-    .scan-banner.dup     { background: var(--purple-bg); border-left-color: var(--purple); color: #4c1d95; }
+    .scan-banner.dup     { background: var(--danger-bg); border: 2px solid var(--danger); border-left-width: 7px; color: #7f1d1d; font-weight: 700; }
 
     /* Input Manual Row */
     .manual-row {
@@ -385,7 +385,7 @@
     .b-matched { background: var(--success-bg); color: var(--success); }
     .b-pending { background: var(--warning-bg); color: var(--warning); }
     .b-extra   { background: var(--danger-bg); color: var(--danger); }
-    .b-dup     { background: var(--purple-bg); color: var(--purple); }
+    .b-dup     { background: var(--danger-bg); color: #991b1b; }
     .b-scanned { background: var(--success-bg); color: #166534; }
 
     .btn-del-item {
@@ -872,7 +872,8 @@
       // Resi yang sudah pernah diterima ditolak: jangan tambah jumlah scan,
       // jangan ubah waktu scan sah, dan jangan ubah status data.
       statusType = "dup";
-      attemptCount = existingScan.count + 1;
+      // Hitung percobaan duplikat dari log; jumlah scan sah tetap tidak berubah.
+      attemptCount = 1 + state.recentLogs.filter(log => log.resi === resi && log.statusType === "dup").length;
     } else {
       state.scanMap[resi] = {
         resi,
@@ -916,7 +917,8 @@
     if (statusType === "matched") {
       title = "✅ COCOK DENGAN DATA AWAL";
     } else if (statusType === "dup") {
-      title = `⛔ DITOLAK! RESI SUDAH PERNAH DISCANN (${scanData.count}x)` + (inInitial ? " • Ada di Data Awal" : " • Tidak Terdaftar");
+      const duplicateAttempt = state.recentLogs.find(log => log.resi === resi && log.statusType === "dup");
+      title = `⛔ SCAN DITOLAK — DUPLIKAT (Percobaan ke-${duplicateAttempt ? duplicateAttempt.count : 2})` + (inInitial ? " • Resi sudah diterima" : " • Tidak terdaftar");
     } else {
       title = "⚠️ TIDAK ADA DI DATA AWAL";
     }
@@ -957,13 +959,13 @@
       html5QrCode = new Html5Qrcode("reader");
 
       const config = {
-        fps: 20,
+        fps: 25,
         qrbox: (vw, vh) => {
-          const w = Math.max(220, Math.floor(vw * 0.82));
-          const h = Math.max(120, Math.min(200, Math.floor(vh * 0.46)));
+          const w = Math.min(vw, Math.max(240, Math.floor(vw * 0.90)));
+          const h = Math.min(vh, Math.max(140, Math.floor(vh * 0.52)));
           return { width: w, height: h };
         },
-        aspectRatio: 1.333,
+        disableFlip: true,
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true
         }
@@ -1007,8 +1009,9 @@
     if (!code) return;
 
     const now = Date.now();
-    // Filter frame berulang sangat singkat; setelah 1,2 detik duplikat akan diberi tanda DITOLAK.
-    if (code === lastCamCode && (now - lastCamTime) < 1200) {
+    // Abaikan frame kamera yang sama dalam 800 ms agar satu paket tidak terbaca berkali-kali.
+    // Setelah jeda ini, pemindaian ulang tetap diproses dan ditandai sebagai duplikat.
+    if (code === lastCamCode && (now - lastCamTime) < 800) {
       return;
     }
 
