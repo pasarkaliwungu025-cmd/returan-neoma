@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Aplikasi pencocokan resi retur marketplace dengan pemindai barcode dan laporan." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>ReturScan - Cek Returan Marketplace</title>
+
+  <!-- Library Excel/CSV (SheetJS) & Barcode Scanner (html5-qrcode) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #16a34a;
+      --success-bg: #dcfce7;
+      --warning: #d97706;
+      --warning-bg: #fef3c7;
+      --danger: #dc2626;
+      --danger-bg: #fee2e2;
+      --purple: #7c3aed;
+      --purple-bg: #ede9fe;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding-bottom: 84px;
+    }
+
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 14px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    header small {
+      display: block;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 12px;
+    }
+
+    /* Tabs Navigasi Bawah (Mobile First) */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      z-index: 60;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+    }
+
+    .nav-btn {
+      border: none;
+      background: none;
+      padding: 10px 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .nav-btn.active {
+      color: var(--primary);
+      background: #eff6ff;
+    }
+
+    .nav-icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0 0 10px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Ringkasan Statistik */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .stat-box {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    .stat-box:active {
+      transform: scale(0.98);
+    }
+
+    .stat-box.selected {
+      outline: 2px solid var(--primary);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+
+    .c-primary { color: var(--primary); }
+    .c-success { color: var(--success); }
+    .c-warning { color: var(--warning); }
+    .c-danger  { color: var(--danger); }
+
+    /* Form & Tombol */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: none;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 44px;
+      transition: opacity 0.15s;
+    }
+
+    .btn:active { opacity: 0.85; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-block { width: 100%; }
+    .btn-sm { padding: 7px 10px; font-size: 12px; min-height: 34px; border-radius: 8px; }
+
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-warning { background: var(--warning); color: #fff; }
+    .btn-danger  { background: var(--danger); color: #fff; }
+    .btn-outline {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-row > * {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    input[type="text"],
+    input[type="search"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 14px;
+      background: #fff;
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    label.field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 5px;
+      margin-top: 10px;
+    }
+
+    /* File Upload Dropzone */
+    .upload-box {
+      border: 2px dashed #94a3b8;
+      border-radius: 12px;
+      padding: 20px 14px;
+      text-align: center;
+      background: #f8fafc;
+      cursor: pointer;
+    }
+
+    .upload-box input[type="file"] {
+      display: none;
+    }
+
+    /* Scanner Area */
+    #reader-wrapper {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      min-height: 200px;
+      display: none;
+      margin-bottom: 10px;
+    }
+
+    #reader-wrapper.active {
+      display: block;
+    }
+
+    #reader {
+      width: 100%;
+    }
+
+    .scan-banner {
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+      display: none;
+      font-size: 14px;
+      border-left: 5px solid transparent;
+    }
+
+    .scan-banner.show { display: block; }
+    .scan-banner.matched { background: var(--success-bg); border-left-color: var(--success); color: #14532d; }
+    .scan-banner.extra   { background: var(--danger-bg); border-left-color: var(--danger); color: #7f1d1d; }
+    .scan-banner.dup     { background: var(--purple-bg); border-left-color: var(--purple); color: #4c1d95; }
+
+    /* Input Manual Row */
+    .manual-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .manual-row input {
+      flex: 1;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* Filter Chips & List */
+    .chips {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+
+    .chip {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .chip.active {
+      background: #0f172a;
+      color: #fff;
+      border-color: #0f172a;
+    }
+
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .resi-item {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .resi-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 14px;
+      font-weight: 700;
+      word-break: break-all;
+    }
+
+    .resi-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+
+    .b-matched { background: var(--success-bg); color: var(--success); }
+    .b-pending { background: var(--warning-bg); color: var(--warning); }
+    .b-extra   { background: var(--danger-bg); color: var(--danger); }
+    .b-dup     { background: var(--purple-bg); color: var(--purple); }
+
+    .btn-del-item {
+      background: #fee2e2;
+      color: #dc2626;
+      border: none;
+      border-radius: 8px;
+      padding: 6px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 28px 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+      margin: 6px 0 0 0;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 12px 0;
+    }
+
+    #mapping-area {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📦 ReturScan Marketplace</h1>
+    <small id="header-status">Siap mencocokkan resi returan</small>
+  </div>
+  <button class="btn btn-sm btn-outline" style="background:#1e293b; color:#fff; border-color:#334155;" onclick="toggleSound()" id="btn-sound">
+    🔊 Bip: ON
+  </button>
+</header>
+
+<div class="container">
+
+  <!-- Ringkasan Selalu Terlihat di Atas -->
+  <div class="stats-grid">
+    <div class="stat-box" onclick="jumpToFilter('ALL')">
+      <div class="stat-label">Data Awal</div>
+      <div class="stat-value c-primary" id="stat-initial">0</div>
+    </div>
+    <div class="stat-box" onclick="jumpToFilter('MATCHED')">
+      <div class="stat-label">Cocok (Diterima)</div>
+      <div class="stat-value c-success" id="stat-matched">0</div>
+    </div>
+    <div class="stat-box" onclick="jumpToFilter('PENDING')">
+      <div class="stat-label">Belum Discan</div>
+      <div class="stat-value c-warning" id="stat-pending">0</div>
+    </div>
+    <div class="stat-box" onclick="jumpToFilter('EXTRA')">
+      <div class="stat-label">Tidak Terdaftar</div>
+      <div class="stat-value c-danger" id="stat-extra">0</div>
+    </div>
+  </div>
+
+  <!-- TAB 1: SCAN & INPUT MANUAL -->
+  <section id="tab-scan" class="tab-panel active">
+    <div class="card">
+      <div class="card-title">
+        <span>📷 Scan Kamera (Banyak Sekaligus)</span>
+        <span style="font-size:12px; color:var(--muted);" id="scan-counter">Scan: 0</span>
+      </div>
+
+      <div id="reader-wrapper">
+        <div id="reader"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-start-cam" onclick="startScanner()">
+          ▶ Mulai Scan Kamera
+        </button>
+        <button class="btn btn-danger" id="btn-stop-cam" onclick="stopScanner()" style="display:none;">
+          ⏹ Stop Kamera
+        </button>
+        <button class="btn btn-outline" id="btn-torch" onclick="toggleTorch()" style="display:none; flex:0 0 auto;">
+          🔦 Senter
+        </button>
+      </div>
+
+      <p class="help-text">
+        Mode berkelanjutan aktif: kamera tetap menyala setelah resi terbaca, langsung arahkan ke paket berikutnya.
+      </p>
+
+      <!-- Banner Hasil Scan Terakhir -->
+      <div id="scan-banner" class="scan-banner"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⌨️ Ketik Manual / Barcode Gun</div>
+      <form onsubmit="handleManualSubmit(event)">
+        <div class="manual-row">
+          <input
+            type="text"
+            id="manual-resi"
+            placeholder="Ketik atau tembak resi..."
+            autocomplete="off"
+            autocapitalize="characters"
+          />
+          <button type="submit" class="btn btn-success" style="flex-shrink:0;">Cek</button>
+        </div>
+      </form>
+
+      <div class="divider"></div>
+
+      <details>
+        <summary style="font-size:13px; font-weight:700; cursor:pointer; color:var(--primary);">
+          📋 Paste Banyak Resi Sekaligus (Ketik Massal)
+        </summary>
+        <div style="margin-top:8px;">
+          <textarea id="bulk-manual-input" rows="4" placeholder="Tempel daftar resi di sini (1 resi per baris)..."></textarea>
+          <button class="btn btn-primary btn-block" style="margin-top:8px;" onclick="handleBulkManual()">
+            Proses Semua Resi di Atas
+          </button>
+        </div>
+      </details>
+    </div>
+
+    <!-- Log 5 Scan Terakhir -->
+    <div class="card">
+      <div class="card-title">
+        <span>🕒 Baru Saja Discan</span>
+        <button class="btn btn-sm btn-outline" onclick="switchTab('tab-data')">Lihat Semua →</button>
+      </div>
+      <div id="recent-list" class="item-list">
+        <div class="empty-state">Belum ada resi yang discan atau diketik.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: UPLOAD DATA AWAL -->
+  <section id="tab-upload" class="tab-panel">
+    <div class="card">
+      <div class="card-title">📤 Unggah Data Awal Returan</div>
+      <p class="help-text" style="margin-top:0; margin-bottom:10px;">
+        Unggah file <strong>Excel (.xlsx / .xls)</strong> atau <strong>CSV</strong> dari Shopee, TikTok Shop, Tokopedia, atau Lazada.
+      </p>
+
+      <label class="upload-box" for="file-input">
+        <div style="font-size:28px; margin-bottom:6px;">📄</div>
+        <div style="font-weight:700; font-size:14px;">Tap di sini untuk pilih file Excel / CSV</div>
+        <div class="help-text">Format didukung: .xlsx, .xls, .csv</div>
+        <input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event)" />
+      </label>
+
+      <div style="margin-top:10px;">
+        <button class="btn btn-outline btn-sm btn-block" onclick="downloadTemplate()">
+          ⬇ Download Contoh Template Excel (.xlsx)
+        </button>
+      </div>
+
+      <!-- Pemetaan Kolom setelah File dipilih -->
+      <div id="mapping-area">
+        <div style="font-size:13px; font-weight:700; color:var(--success);" id="file-preview-info"></div>
+
+        <label class="field-label">Pilih Kolom Nomor Resi (Wajib)</label>
+        <select id="col-resi"></select>
+
+        <label class="field-label">Pilih Kolom No. Pesanan / Order ID (Opsional)</label>
+        <select id="col-order"></select>
+
+        <label class="field-label">Pilih Kolom Produk / Alasan / Catatan (Opsional)</label>
+        <select id="col-note"></select>
+
+        <label class="field-label">Mode Impor</label>
+        <select id="import-mode">
+          <option value="replace">Ganti Data Awal Lama (Timpa)</option>
+          <option value="append">Tambahkan ke Data Awal yang Ada</option>
+        </select>
+
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="confirmImport()">✅ Simpan Data Awal</button>
+          <button class="btn btn-outline" onclick="cancelImport()">Batal</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💡 Tips Agar Data Akurat</div>
+      <ul style="margin:0; padding-left:18px; font-size:13px; color:var(--muted); line-height:1.6;">
+        <li>Pastikan kolom nomor resi di Excel tidak terpotong menjadi format ilmiah (<code>1.23E+12</code>).</li>
+        <li>Spasi di awal/akhir resi dan huruf besar/kecil otomatis dirapikan saat pencocokan.</li>
+        <li>Data tersimpan otomatis di memori HP meski aplikasi ditutup.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- TAB 3: HASIL PENCOCOKAN, DOWNLOAD & HAPUS -->
+  <section id="tab-data" class="tab-panel">
+    <div class="card">
+      <div class="card-title">📥 Download Laporan Hasil</div>
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="exportExcel()">
+          📊 Download Excel (.xlsx)
+        </button>
+        <button class="btn btn-outline" onclick="exportCSV()">
+          📄 Download CSV
+        </button>
+      </div>
+      <p class="help-text">
+        File Excel berisi sheet terpisah: Ringkasan, Semua Data, Hanya Cocok, Belum Scan, dan Tidak Terdaftar.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🗑 Kelola & Hapus Data</div>
+      <div class="btn-row">
+        <button class="btn btn-warning btn-sm" onclick="clearScansOnly()">
+          Hapus Hasil Scan Saja
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="clearAllData()">
+          Hapus Semua Data (Reset)
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔎 Daftar Pencocokan Resi</div>
+
+      <input
+        type="search"
+        id="search-box"
+        placeholder="Cari nomor resi, no pesanan, catatan..."
+        oninput="renderDataList()"
+        style="margin-bottom:10px;"
+      />
+
+      <div class="chips" id="filter-chips">
+        <button class="chip active" data-filter="ALL" onclick="setFilter('ALL')">Semua</button>
+        <button class="chip" data-filter="MATCHED" onclick="setFilter('MATCHED')">✅ Cocok</button>
+        <button class="chip" data-filter="PENDING" onclick="setFilter('PENDING')">⏳ Belum Scan</button>
+        <button class="chip" data-filter="EXTRA" onclick="setFilter('EXTRA')">⚠️ Tidak Terdaftar</button>
+        <button class="chip" data-filter="DUPLICATE" onclick="setFilter('DUPLICATE')">🔁 Duplikat (&gt;1x)</button>
+      </div>
+
+      <div id="data-list" class="item-list">
+        <div class="empty-state">Belum ada data. Silakan upload data awal atau mulai scan resi.</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- Navigasi Bawah -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-tab="tab-scan" onclick="switchTab('tab-scan')">
+    <span class="nav-icon">📷</span>
+    <span>Scan & Ketik</span>
+  </button>
+  <button class="nav-btn" data-tab="tab-upload" onclick="switchTab('tab-upload')">
+    <span class="nav-icon">📤</span>
+    <span>Upload Data</span>
+  </button>
+  <button class="nav-btn" data-tab="tab-data" onclick="switchTab('tab-data')">
+    <span class="nav-icon">📊</span>
+    <span>Hasil & Hapus</span>
+  </button>
+</nav>
+
+<script>
+  // ==========================================
+  // STATE & PENYIMPANAN LOKAL
+  // ==========================================
+  const STORAGE_KEY = "returscan_marketplace_v1";
+
+  // initialMap: { [resiNormal]: { resi, orderId, note, addedAt } }
+  // scanMap:    { [resiNormal]: { resi, count, firstScanAt, lastScanAt, method } }
+  // recentLogs: [ { resi, status, time, method, count } ]
+  let state = {
+    initialMap: {},
+    scanMap: {},
+    recentLogs: [],
+    soundOn: true
+  };
+
+  let currentFilter = "ALL";
+  let parsedRowsTemp = [];
+  let parsedHeadersTemp = [];
+
+  // Scanner state
+  let html5QrCode = null;
+  let isScanning = false;
+  let torchOn = false;
+  let lastCamCode = "";
+  let lastCamTime = 0;
+
+  // Web Audio Context untuk bunyi BIP
+  let audioCtx = null;
+
+  function initAudio() {
+    if (!audioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) audioCtx = new AudioContext();
+    }
+    if (audioCtx && audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+  }
+
+  function playBeep(type) {
+    if (!state.soundOn) return;
+    try {
+      initAudio();
+      if (!audioCtx) return;
+
+      const beepOnce = (freq, duration, delay = 0) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type === "extra" ? "sawtooth" : "sine";
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + delay);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime + delay);
+        osc.stop(audioCtx.currentTime + delay + duration);
+      };
+
+      if (type === "matched") {
+        beepOnce(1046, 0.12, 0);
+        if (navigator.vibrate) navigator.vibrate(80);
+      } else if (type === "dup") {
+        beepOnce(660, 0.09, 0);
+        beepOnce(660, 0.09, 0.12);
+        if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
+      } else {
+        beepOnce(220, 0.28, 0);
+        if (navigator.vibrate) navigator.vibrate([150, 60, 150]);
+      }
+    } catch (e) {
+      // Abaikan error audio jika browser membatasi
+    }
+  }
+
+  function loadState() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        state.initialMap = parsed.initialMap || {};
+        state.scanMap = parsed.scanMap || {};
+        state.recentLogs = parsed.recentLogs || [];
+        state.soundOn = parsed.soundOn !== undefined ? parsed.soundOn : true;
+      }
+    } catch (e) {
+      console.error("Gagal membaca localStorage", e);
+    }
+    updateSoundBtn();
+    refreshAllUI();
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      alert("Memori penyimpanan penuh. Silakan download hasil dan hapus data lama.");
+    }
+  }
+
+  // ==========================================
+  // UTILITAS
+  // ==========================================
+  function normalizeResi(str) {
+    return String(str || "")
+      .trim()
+      .replace(/\s+/g, "")
+      .toUpperCase();
+  }
+
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function nowFormatted() {
+    const d = new Date();
+    return d.toLocaleString("id-ID", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  }
+
+  function toggleSound() {
+    initAudio();
+    state.soundOn = !state.soundOn;
+    updateSoundBtn();
+    saveState();
+  }
+
+  function updateSoundBtn() {
+    const btn = document.getElementById("btn-sound");
+    btn.textContent = state.soundOn ? "🔊 Bip: ON" : "🔇 Bip: OFF";
+  }
+
+  // ==========================================
+  // NAVIGASI TAB
+  // ==========================================
+  function switchTab(tabId) {
+    document.querySelectorAll(".tab-panel").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".nav-btn").forEach(el => el.classList.remove("active"));
+    document.getElementById(tabId).classList.add("active");
+    document.querySelector(`.nav-btn[data-tab="${tabId}"]`).classList.add("active");
+
+    if (tabId === "tab-data") {
+      renderDataList();
+    }
+  }
+
+  function jumpToFilter(filterName) {
+    setFilter(filterName);
+    switchTab("tab-data");
+  }
+
+  function setFilter(filterName) {
+    currentFilter = filterName;
+    document.querySelectorAll(".chip").forEach(c => {
+      c.classList.toggle("active", c.dataset.filter === filterName);
+    });
+    renderDataList();
+  }
+
+  // ==========================================
+  // LOGIKA PENCOCOKAN INTI
+  // ==========================================
+  function processTrackingCode(rawCode, method) {
+    const resi = normalizeResi(rawCode);
+    if (!resi) return null;
+
+    const inInitial = Boolean(state.initialMap[resi]);
+    const existingScan = state.scanMap[resi];
+    const timestamp = nowFormatted();
+
+    let statusType = ""; // matched | dup | extra
+
+    if (existingScan) {
+      existingScan.count += 1;
+      existingScan.lastScanAt = timestamp;
+      existingScan.lastScanMs = Date.now();
+      existingScan.method = method;
+      statusType = "dup";
+    } else {
+      state.scanMap[resi] = {
+        resi,
+        count: 1,
+        firstScanAt: timestamp,
+        lastScanAt: timestamp,
+        lastScanMs: Date.now(),
+        method
+      };
+      statusType = inInitial ? "matched" : "extra";
+    }
+
+    // Simpan ke log terbaru (maks 15 item)
+    state.recentLogs.unshift({
+      resi,
+      statusType,
+      inInitial,
+      count: state.scanMap[resi].count,
+      time: timestamp,
+      method
+    });
+    if (state.recentLogs.length > 15) {
+      state.recentLogs.length = 15;
+    }
+
+    saveState();
+    playBeep(statusType);
+    showScanBanner(resi, statusType, inInitial);
+    refreshAllUI();
+    return statusType;
+  }
+
+  function showScanBanner(resi, statusType, inInitial) {
+    const banner = document.getElementById("scan-banner");
+    const initData = state.initialMap[resi];
+    const scanData = state.scanMap[resi];
+
+    banner.className = "scan-banner show " + statusType;
+
+    let title = "";
+    if (statusType === "matched") {
+      title = "✅ COCOK DENGAN DATA AWAL";
+    } else if (statusType === "dup") {
+      title = `🔁 DUPLIKAT! Sudah discan ${scanData.count}x` + (inInitial ? " (Ada di Data Awal)" : " (Tidak Terdaftar)");
+    } else {
+      title = "⚠️ TIDAK ADA DI DATA AWAL";
+    }
+
+    let extraInfo = "";
+    if (initData) {
+      const parts = [];
+      if (initData.orderId) parts.push(`Order: ${escapeHtml(initData.orderId)}`);
+      if (initData.note) parts.push(`Info: ${escapeHtml(initData.note)}`);
+      if (parts.length) extraInfo = `<div style="margin-top:4px; font-size:12px;">${parts.join(" • ")}</div>`;
+    }
+
+    banner.innerHTML = `
+      <div style="font-weight:800;">${title}</div>
+      <div style="font-family:monospace; font-size:16px; font-weight:800; margin-top:3px;">${escapeHtml(resi)}</div>
+      ${extraInfo}
+    `;
+  }
+
+  // ==========================================
+  // SCANNER KAMERA (BULK / CONTINUOUS)
+  // ==========================================
+  async function startScanner() {
+    initAudio();
+    if (isScanning) return;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert(
+        "Kamera tidak dapat diakses. Pastikan Anda membuka aplikasi ini melalui HTTPS (misal GitHub Pages / Netlify / localhost) dan izinkan akses kamera di Chrome Android."
+      );
+      return;
+    }
+
+    const wrapper = document.getElementById("reader-wrapper");
+    wrapper.classList.add("active");
+
+    try {
+      html5QrCode = new Html5Qrcode("reader");
+
+      const config = {
+        fps: 12,
+        qrbox: (vw, vh) => {
+          const w = Math.max(200, Math.floor(vw * 0.86));
+          const h = Math.max(110, Math.min(180, Math.floor(vh * 0.42)));
+          return { width: w, height: h };
+        },
+        aspectRatio: 1.333,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
+      };
+
+      if (typeof Html5QrcodeSupportedFormats !== "undefined") {
+        config.formatsToSupport = [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ];
+      }
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        onCameraScanSuccess,
+        () => {} // abaikan error frame kosong
+      );
+
+      isScanning = true;
+      torchOn = false;
+      document.getElementById("btn-start-cam").style.display = "none";
+      document.getElementById("btn-stop-cam").style.display = "inline-flex";
+      document.getElementById("btn-torch").style.display = "inline-flex";
+      document.getElementById("header-status").textContent = "Kamera aktif • Mode scan massal";
+    } catch (err) {
+      wrapper.classList.remove("active");
+      alert("Gagal membuka kamera: " + err);
+    }
+  }
+
+  function onCameraScanSuccess(decodedText) {
+    const code = normalizeResi(decodedText);
+    if (!code) return;
+
+    const now = Date.now();
+    // Jeda 2 detik hanya untuk resi YANG SAMA agar kamera tidak menembak berulang dalam 1 detik
+    if (code === lastCamCode && (now - lastCamTime) < 2000) {
+      return;
+    }
+
+    lastCamCode = code;
+    lastCamTime = now;
+    processTrackingCode(code, "Kamera");
+  }
+
+  async function stopScanner() {
+    if (!html5QrCode || !isScanning) return;
+    try {
+      await html5QrCode.stop();
+      html5QrCode.clear();
+    } catch (e) {
+      console.error(e);
+    }
+    isScanning = false;
+    torchOn = false;
+    document.getElementById("reader-wrapper").classList.remove("active");
+    document.getElementById("btn-start-cam").style.display = "inline-flex";
+    document.getElementById("btn-stop-cam").style.display = "none";
+    document.getElementById("btn-torch").style.display = "none";
+    document.getElementById("header-status").textContent = "Siap mencocokkan resi returan";
+  }
+
+  async function toggleTorch() {
+    if (!html5QrCode || !isScanning) return;
+    try {
+      const next = !torchOn;
+      await html5QrCode.applyVideoConstraints({
+        torch: next,
+        advanced: [{ torch: next }]
+      });
+      torchOn = next;
+      document.getElementById("btn-torch").textContent = torchOn ? "🔦 Senter: ON" : "🔦 Senter";
+    } catch (e) {
+      alert("Perangkat atau browser ini tidak mendukung tombol senter web.");
+    }
+  }
+
+  // ==========================================
+  // INPUT MANUAL & MASSAL
+  // ==========================================
+  function handleManualSubmit(e) {
+    e.preventDefault();
+    initAudio();
+    const input = document.getElementById("manual-resi");
+    const val = input.value.trim();
+    if (!val) return;
+    processTrackingCode(val, "Manual");
+    input.value = "";
+    input.focus();
+  }
+
+  function handleBulkManual() {
+    initAudio();
+    const area = document.getElementById("bulk-manual-input");
+    const lines = area.value
+      .split(/\r?\n|,|;/)
+      .map(s => normalizeResi(s))
+      .filter(Boolean);
+
+    if (lines.length === 0) {
+      alert("Masukkan minimal 1 nomor resi.");
+      return;
+    }
+
+    lines.forEach(code => processTrackingCode(code, "Manual Massal"));
+    area.value = "";
+    alert(`${lines.length} resi selesai diproses.`);
+  }
+
+  // ==========================================
+  // UPLOAD & PARSING EXCEL / CSV
+  // ==========================================
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonRows = XLSX.utils.sheet_to_json(firstSheet, { defval: "", raw: false });
+
+        if (!jsonRows || jsonRows.length === 0) {
+          alert("File kosong atau tidak memiliki baris data.");
+          return;
+        }
+
+        parsedRowsTemp = jsonRows;
+        parsedHeadersTemp = Object.keys(jsonRows[0]);
+        populateColumnSelectors(file.name, jsonRows.length, parsedHeadersTemp);
+      } catch (err) {
+        alert("Gagal membaca file: " + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function populateColumnSelectors(fileName, rowCount, headers) {
+    document.getElementById("file-preview-info").textContent =
+      `File terbaca: ${fileName} (${rowCount} baris)`;
+
+    const colResi = document.getElementById("col-resi");
+    const colOrder = document.getElementById("col-order");
+    const colNote = document.getElementById("col-note");
+
+    colResi.innerHTML = "";
+    colOrder.innerHTML = `<option value="">-- Tidak dipilih --</option>`;
+    colNote.innerHTML = `<option value="">-- Tidak dipilih --</option>`;
+
+    headers.forEach(h => {
+      const opt1 = new Option(h, h);
+      const opt2 = new Option(h, h);
+      const opt3 = new Option(h, h);
+      colResi.add(opt1);
+      colOrder.add(opt2);
+      colNote.add(opt3);
+    });
+
+    // Auto-deteksi nama kolom marketplace
+    const findMatch = (keywords) =>
+      headers.find(h => keywords.some(k => h.toLowerCase().includes(k)));
+
+    const autoResi = findMatch(["resi", "tracking", "awb", "waybill", "pengiriman"]);
+    const autoOrder = findMatch(["pesanan", "order", "invoice"]);
+    const autoNote = findMatch(["produk", "barang", "alasan", "catatan", "note", "kurir", "marketplace", "pembeli"]);
+
+    if (autoResi) colResi.value = autoResi;
+    if (autoOrder) colOrder.value = autoOrder;
+    if (autoNote) colNote.value = autoNote;
+
+    document.getElementById("mapping-area").style.display = "block";
+  }
+
+  function confirmImport() {
+    const resiKey = document.getElementById("col-resi").value;
+    const orderKey = document.getElementById("col-order").value;
+    const noteKey = document.getElementById("col-note").value;
+    const mode = document.getElementById("import-mode").value;
+
+    if (!resiKey) {
+      alert("Pilih kolom Nomor Resi terlebih dahulu.");
+      return;
+    }
+
+    if (mode === "replace") {
+      state.initialMap = {};
+    }
+
+    let importedCount = 0;
+    const timestamp = nowFormatted();
+
+    parsedRowsTemp.forEach(row => {
+      const resi = normalizeResi(row[resiKey]);
+      if (!resi) return;
+
+      state.initialMap[resi] = {
+        resi,
+        orderId: orderKey ? String(row[orderKey] || "").trim() : "",
+        note: noteKey ? String(row[noteKey] || "").trim() : "",
+        addedAt: timestamp
+      };
+      importedCount++;
+    });
+
+    saveState();
+    cancelImport();
+    refreshAllUI();
+    alert(`Berhasil memuat ${importedCount} resi ke Data Awal!`);
+    switchTab("tab-scan");
+  }
+
+  function cancelImport() {
+    parsedRowsTemp = [];
+    parsedHeadersTemp = [];
+    document.getElementById("file-input").value = "";
+    document.getElementById("mapping-area").style.display = "none";
+  }
+
+  function downloadTemplate() {
+    const sample = [
+      { "No Resi": "SPXID041234567890", "No Pesanan": "261113ABC123", "Catatan": "Shopee - Baju Kaos Hitam" },
+      { "No Resi": "JP9876543210", "No Pesanan": "577123456789", "Catatan": "TikTok - Sepatu Ukuran 42" },
+      { "No Resi": "TK8822113344", "No Pesanan": "INV/20261113/001", "Catatan": "Tokopedia - Tas Ransel" }
+    ];
+    const ws = XLSX.utils.json_to_sheet(sample);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template_Returan");
+    XLSX.writeFile(wb, "Template_Data_Awal_Returan.xlsx");
+  }
+
+  // ==========================================
+  // RENDER UI & DAFTAR DATA
+  // ==========================================
+  function getCombinedRecords() {
+    const allResi = new Set([
+      ...Object.keys(state.initialMap),
+      ...Object.keys(state.scanMap)
+    ]);
+
+    const records = [];
+    allResi.forEach(resi => {
+      const init = state.initialMap[resi] || null;
+      const scan = state.scanMap[resi] || null;
+
+      let status = "PENDING";
+      if (init && scan) status = "MATCHED";
+      else if (!init && scan) status = "EXTRA";
+
+      records.push({
+        resi,
+        status,
+        isDuplicate: Boolean(scan && scan.count > 1),
+        scanCount: scan ? scan.count : 0,
+        orderId: init ? init.orderId : "",
+        note: init ? init.note : "",
+        firstScanAt: scan ? scan.firstScanAt : "",
+        lastScanAt: scan ? scan.lastScanAt : "",
+        lastScanMs: scan ? (Number(scan.lastScanMs) || 0) : 0,
+        method: scan ? scan.method : ""
+      });
+    });
+
+    // Urutkan: yang terbaru discan di atas, lalu pending
+    records.sort((a, b) => {
+      if (a.scanCount > 0 && b.scanCount === 0) return -1;
+      if (a.scanCount === 0 && b.scanCount > 0) return 1;
+      const aTime = a.lastScanMs || 0;
+      const bTime = b.lastScanMs || 0;
+      return bTime - aTime;
+    });
+
+    return records;
+  }
+
+  function refreshAllUI() {
+    const records = getCombinedRecords();
+    const initialTotal = Object.keys(state.initialMap).length;
+    const matchedTotal = records.filter(r => r.status === "MATCHED").length;
+    const pendingTotal = records.filter(r => r.status === "PENDING").length;
+    const extraTotal = records.filter(r => r.status === "EXTRA").length;
+    const totalScans = Object.values(state.scanMap).reduce((sum, item) => sum + item.count, 0);
+
+    document.getElementById("stat-initial").textContent = initialTotal;
+    document.getElementById("stat-matched").textContent = matchedTotal;
+    document.getElementById("stat-pending").textContent = pendingTotal;
+    document.getElementById("stat-extra").textContent = extraTotal;
+    document.getElementById("scan-counter").textContent = `Total Scan: ${totalScans}`;
+
+    renderRecentLogs();
+    renderDataList();
+  }
+
+  function renderRecentLogs() {
+    const container = document.getElementById("recent-list");
+    if (state.recentLogs.length === 0) {
+      container.innerHTML = `<div class="empty-state">Belum ada resi yang discan atau diketik.</div>`;
+      return;
+    }
+
+    container.innerHTML = state.recentLogs.slice(0, 5).map(log => {
+      let badge = "";
+      if (log.statusType === "matched") badge = `<span class="badge b-matched">COCOK</span>`;
+      else if (log.statusType === "dup") badge = `<span class="badge b-dup">DUPLIKAT (${log.count}x)</span>`;
+      else badge = `<span class="badge b-extra">TIDAK TERDAFTAR</span>`;
+
+      return `
+        <div class="resi-item">
+          <div>
+            <div class="resi-code">${escapeHtml(log.resi)}</div>
+            <div class="resi-meta">${badge} • ${escapeHtml(log.method)} • ${escapeHtml(log.time)}</div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderDataList() {
+    const container = document.getElementById("data-list");
+    const keyword = (document.getElementById("search-box").value || "").trim().toLowerCase();
+    let records = getCombinedRecords();
+
+    if (currentFilter === "MATCHED") records = records.filter(r => r.status === "MATCHED");
+    else if (currentFilter === "PENDING") records = records.filter(r => r.status === "PENDING");
+    else if (currentFilter === "EXTRA") records = records.filter(r => r.status === "EXTRA");
+    else if (currentFilter === "DUPLICATE") records = records.filter(r => r.isDuplicate);
+
+    if (keyword) {
+      records = records.filter(r =>
+        r.resi.toLowerCase().includes(keyword) ||
+        r.orderId.toLowerCase().includes(keyword) ||
+        r.note.toLowerCase().includes(keyword)
+      );
+    }
+
+    if (records.length === 0) {
+      container.innerHTML = `<div class="empty-state">Tidak ada data yang sesuai filter.</div>`;
+      return;
+    }
+
+    container.innerHTML = records.map(r => {
+      let badge = "";
+      if (r.status === "MATCHED") badge = `<span class="badge b-matched">COCOK</span>`;
+      else if (r.status === "PENDING") badge = `<span class="badge b-pending">BELUM SCAN</span>`;
+      else badge = `<span class="badge b-extra">TIDAK TERDAFTAR</span>`;
+
+      const dupBadge = r.isDuplicate ? `<span class="badge b-dup">DUPLIKAT ${r.scanCount}x</span>` : "";
+
+      const metaLines = [];
+      if (r.orderId) metaLines.push(`Order: ${escapeHtml(r.orderId)}`);
+      if (r.note) metaLines.push(`${escapeHtml(r.note)}`);
+      if (r.scanCount > 0) metaLines.push(`Scan: ${escapeHtml(r.method)} (${escapeHtml(r.lastScanAt)})`);
+
+      return `
+        <div class="resi-item">
+          <div style="min-width:0; flex:1;">
+            <div class="resi-code">${escapeHtml(r.resi)}</div>
+            <div style="margin-top:4px;">${badge}${dupBadge}</div>
+            ${metaLines.length ? `<div class="resi-meta">${metaLines.join("<br>")}</div>` : ""}
+          </div>
+          <button class="btn-del-item" type="button" data-delete-resi="${escapeHtml(r.resi)}">Hapus</button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // ==========================================
+  // HAPUS DATA
+  // ==========================================
+  function deleteSingleResi(resi) {
+    if (!confirm(`Hapus resi ${resi} dari daftar?`)) return;
+    delete state.initialMap[resi];
+    delete state.scanMap[resi];
+    state.recentLogs = state.recentLogs.filter(l => l.resi !== resi);
+    saveState();
+    refreshAllUI();
+  }
+
+  function clearScansOnly() {
+    if (Object.keys(state.scanMap).length === 0) {
+      alert("Belum ada data hasil scan.");
+      return;
+    }
+    if (!confirm("Hapus semua hasil scan/ketik manual? (Data awal dari file tetap aman)")) return;
+    state.scanMap = {};
+    state.recentLogs = [];
+    document.getElementById("scan-banner").className = "scan-banner";
+    saveState();
+    refreshAllUI();
+  }
+
+  function clearAllData() {
+    if (!confirm("PERINGATAN: Hapus SEMUA data awal dan hasil scan? Data yang dihapus tidak bisa dikembalikan.")) return;
+    state.initialMap = {};
+    state.scanMap = {};
+    state.recentLogs = [];
+    document.getElementById("scan-banner").className = "scan-banner";
+    saveState();
+    refreshAllUI();
+  }
+
+  // ==========================================
+  // DOWNLOAD / EXPORT EXCEL & CSV
+  // ==========================================
+  function formatExportRows(records) {
+    return records.map((r, i) => ({
+      "No": i + 1,
+      "Nomor Resi": r.resi,
+      "Status Pencocokan": r.status === "MATCHED" ? "COCOK" : (r.status === "PENDING" ? "BELUM SCAN" : "TIDAK TERDAFTAR"),
+      "Jumlah Scan": r.scanCount,
+      "Keterangan Duplikat": r.isDuplicate ? "YA" : "TIDAK",
+      "No Pesanan": r.orderId || "-",
+      "Catatan / Produk": r.note || "-",
+      "Metode Input": r.method || "-",
+      "Waktu Scan Terakhir": r.lastScanAt || "-"
+    }));
+  }
+
+  function exportExcel() {
+    const records = getCombinedRecords();
+    if (records.length === 0) {
+      alert("Tidak ada data untuk didownload.");
+      return;
+    }
+
+    const matched = records.filter(r => r.status === "MATCHED");
+    const pending = records.filter(r => r.status === "PENDING");
+    const extra = records.filter(r => r.status === "EXTRA");
+
+    const summaryData = [
+      { "Keterangan": "Waktu Export", "Nilai": nowFormatted() },
+      { "Keterangan": "Total Data Awal", "Nilai": Object.keys(state.initialMap).length },
+      { "Keterangan": "Cocok (Sudah Diterima)", "Nilai": matched.length },
+      { "Keterangan": "Belum Discan (Pending)", "Nilai": pending.length },
+      { "Keterangan": "Tidak Terdaftar (Ekstra)", "Nilai": extra.length }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), "Ringkasan");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExportRows(records)), "Semua_Data");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExportRows(matched)), "Cocok");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExportRows(pending)), "Belum_Scan");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formatExportRows(extra)), "Tidak_Terdaftar");
+
+    const dateTag = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Laporan_Returan_${dateTag}.xlsx`);
+  }
+
+  function exportCSV() {
+    const records = getCombinedRecords();
+    if (records.length === 0) {
+      alert("Tidak ada data untuk didownload.");
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(formatExportRows(records));
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Laporan_Returan_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Delegasi klik: hindari menyisipkan nomor resi ke dalam kode JavaScript inline.
+  document.getElementById("data-list").addEventListener("click", event => {
+    const button = event.target.closest("[data-delete-resi]");
+    if (button) deleteSingleResi(button.dataset.deleteResi);
+  });
+
+  // Daftarkan service worker agar aplikasi dapat dipasang dan dibuka offline.
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js").catch(err => {
+        console.warn("Service worker tidak dapat didaftarkan:", err);
+      });
+    });
+  }
+
+  // Inisialisasi saat aplikasi dibuka
+  window.addEventListener("DOMContentLoaded", loadState);
+</script>
+</body>
+</html>
