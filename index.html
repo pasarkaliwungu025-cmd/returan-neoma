@@ -767,9 +767,12 @@
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        state.initialMap = parsed.initialMap || {};
-        state.scanMap = parsed.scanMap || {};
-        state.recentLogs = parsed.recentLogs || [];
+        state.initialMap = migrateResiMap(parsed.initialMap || {});
+        state.scanMap = migrateResiMap(parsed.scanMap || {});
+        state.recentLogs = (parsed.recentLogs || []).map(log => ({
+          ...log,
+          resi: normalizeResi(log.resi)
+        })).filter(log => log.resi);
         state.soundOn = parsed.soundOn !== undefined ? parsed.soundOn : true;
       }
     } catch (e) {
@@ -791,10 +794,24 @@
   // UTILITAS
   // ==========================================
   function normalizeResi(str) {
+    // Kunci kanonis: abaikan spasi dan pemisah umum agar variasi format
+    // hasil baca barcode tetap dikenali sebagai nomor resi yang sama.
     return String(str || "")
+      .normalize("NFKC")
       .trim()
-      .replace(/\s+/g, "")
-      .toUpperCase();
+      .toUpperCase()
+      .replace(/[\\s\\-‐‑‒–—._/]+/g, "");
+  }
+
+  function migrateResiMap(map) {
+    const migrated = {};
+    for (const [oldKey, value] of Object.entries(map || {})) {
+      const key = normalizeResi(value && value.resi ? value.resi : oldKey);
+      if (!key) continue;
+      // Jika dua format lama menjadi satu kunci, pertahankan entri pertama.
+      if (!migrated[key]) migrated[key] = { ...value, resi: key };
+    }
+    return migrated;
   }
 
   function escapeHtml(str) {
@@ -861,6 +878,8 @@
     if (!resi) return null;
 
     const inInitial = Boolean(state.initialMap[resi]);
+    // Cek lagi di fungsi inti (bukan hanya callback kamera): semua jalur input
+    // manual, massal, dan kamera wajib menolak resi yang sudah pernah diterima.
     const existingScan = state.scanMap[resi];
     const timestamp = nowFormatted();
 
@@ -1009,11 +1028,10 @@
     if (!code) return;
 
     const now = Date.now();
-    // Abaikan frame kamera yang sama dalam 800 ms agar satu paket tidak terbaca berkali-kali.
-    // Setelah jeda ini, pemindaian ulang tetap diproses dan ditandai sebagai duplikat.
-    if (code === lastCamCode && (now - lastCamTime) < 800) {
-      return;
-    }
+    // Satu barcode yang masih berada di depan kamera hanya diproses sekali.
+    // Setelah jeda, pembacaan ulang tetap masuk ke pemeriksaan inti dan ditolak
+    // bila resi sudah ada di scanMap; tidak pernah menjadi data scan baru.
+    if (code === lastCamCode && (now - lastCamTime) < 1800) return;
 
     lastCamCode = code;
     lastCamTime = now;
