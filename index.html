@@ -443,8 +443,8 @@
     <h1>📦 ReturScan Marketplace</h1>
     <small id="header-status">Siap mencocokkan resi returan</small>
   </div>
-  <button class="btn btn-sm btn-outline" style="background:#1e293b; color:#fff; border-color:#334155;" onclick="toggleSound()" id="btn-sound">
-    🔊 Bip: ON
+  <button class="btn btn-sm btn-outline" style="background:#1e293b; color:#fff; border-color:#334155;" onclick="toggleSound()" id="btn-sound" aria-label="Aktifkan atau nonaktifkan bunyi dan getar" title="Umpan balik saat resi berhasil dipindai">
+    🔔 Bunyi + Getar: ON
   </button>
 </header>
 
@@ -709,12 +709,25 @@
       if (AudioContext) audioCtx = new AudioContext();
     }
     if (audioCtx && audioCtx.state === "suspended") {
-      audioCtx.resume();
+      // Resume dipicu dari tombol Mulai Scan / Bunyi + Getar agar diizinkan Android.
+      audioCtx.resume().catch(() => {});
     }
   }
 
   function playBeep(type) {
     if (!state.soundOn) return;
+
+    // Getaran tetap dicoba meskipun Web Audio tidak tersedia di perangkat.
+    if (typeof navigator.vibrate === "function") {
+      try {
+        if (type === "matched") navigator.vibrate(90);
+        else if (type === "dup") navigator.vibrate([55, 45, 55]);
+        else navigator.vibrate([120, 50, 120]);
+      } catch (e) {
+        // Getaran tidak didukung atau dibatasi perangkat.
+      }
+    }
+
     try {
       initAudio();
       if (!audioCtx) return;
@@ -733,18 +746,18 @@
       };
 
       if (type === "matched") {
-        beepOnce(1046, 0.12, 0);
-        if (navigator.vibrate) navigator.vibrate(80);
+        // Satu bip tinggi untuk resi yang cocok dengan data awal.
+        beepOnce(1046, 0.14, 0);
       } else if (type === "dup") {
+        // Dua bip pendek untuk resi yang terdeteksi duplikat.
         beepOnce(660, 0.09, 0);
-        beepOnce(660, 0.09, 0.12);
-        if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
+        beepOnce(660, 0.09, 0.13);
       } else {
+        // Nada rendah untuk resi yang tidak ada di data awal.
         beepOnce(220, 0.28, 0);
-        if (navigator.vibrate) navigator.vibrate([150, 60, 150]);
       }
     } catch (e) {
-      // Abaikan error audio jika browser membatasi
+      // Abaikan error audio jika browser membatasi.
     }
   }
 
@@ -809,7 +822,7 @@
 
   function updateSoundBtn() {
     const btn = document.getElementById("btn-sound");
-    btn.textContent = state.soundOn ? "🔊 Bip: ON" : "🔇 Bip: OFF";
+    btn.textContent = state.soundOn ? "🔔 Bunyi + Getar: ON" : "🔕 Bunyi + Getar: OFF";
   }
 
   // ==========================================
